@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Login</title>
+
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+<style>
+body{
+height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+background: linear-gradient(135deg,#2c3e50,#4ca1af);
+font-family: Arial;
+}
+
+.container-box{
+width:360px;
+padding:35px;
+background:white;
+border-radius:12px;
+box-shadow:0 10px 25px rgba(0,0,0,0.2);
+}
+
+.error{
+background:#ffe5e5;
+color:#cc0000;
+padding:10px;
+border-radius:8px;
+font-size:14px;
+margin-top:10px;
+text-align:center;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container-box">
+
+<h3 class="text-center mb-3">ZKP Login</h3>
+
+<input id="username" class="form-control mb-3" placeholder="Username">
+<input id="password" type="password" class="form-control mb-3" placeholder="Password">
+
+<!-- ✅ FIXED BUTTON -->
+<button type="button" class="btn btn-primary w-100" onclick="loginZKP()">
+Login
+</button>
+
+<div id="errorBox" class="error" style="display:none;"></div>
+
+<div class="text-center mt-3">
+<a href="/register">Register</a>
+</div>
+
+</div>
+
+<script>
+const p = 1019;
+const g = 2;
+
+function hashToSecret(pw){
+let h = 0;
+for(let i=0;i<pw.length;i++){
+    h = (h*31 + pw.charCodeAt(i)) % (p-1);
+}
+return h;
+}
+
+function modExp(base, exp, mod){
+let result = 1;
+base = base % mod;
+while(exp > 0){
+    if(exp % 2 === 1){
+        result = (result * base) % mod;
+    }
+    base = (base * base) % mod;
+    exp = Math.floor(exp / 2);
+}
+return result;
+}
+
+async function loginZKP(){
+
+let username = document.getElementById("username").value.trim();
+let password = document.getElementById("password").value.trim();
+
+let errorBox = document.getElementById("errorBox");
+errorBox.style.display = "none";
+
+
+// ✅ FIX (ONLY THIS ADDED)
+if(!username || !password){
+    errorBox.style.display = "block";
+    errorBox.innerText = "Username and Password required";
+    return;
+}
+
+
+// EXISTING ZKP (UNCHANGED)
+let secret = hashToSecret(password);
+let r = Math.floor(Math.random()*(p-2)) + 1;
+let commitment = modExp(g, r, p);
+
+let res1 = await fetch("/start_zkp", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+        username: username,
+        commitment: commitment
+    })
+});
+
+let data1 = await res1.json();
+
+if(data1.error){
+    errorBox.style.display = "block";
+    errorBox.innerText = data1.error;
+    return;
+}
+
+let response = (r + data1.challenge * secret) % (p-1);
+
+let res2 = await fetch("/verify_zkp", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+        username: username,
+        response: response
+    })
+});
+
+let data2 = await res2.json();
+
+if(data2.success){
+    window.location = "/dashboard";
+}else{
+    errorBox.style.display = "block";
+    errorBox.innerText = data2.error || "Authentication Failed";
+}
+}
+</script>
+
+</body>
+</html>
